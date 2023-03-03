@@ -33,7 +33,7 @@ voltage_get = ADC(26)
 current_limited = ADC(28)
 
 class RotaryEncoder():
-    def __init__(self, value, step, step_min, step_max, pin_a, pin_b, on_update):
+    def __init__(self, value, step, step_min, step_max, pin_a, pin_b, on_update, limits):
         self.a = Pin(pin_a, Pin.IN, Pin.PULL_UP)
         self.b = Pin(pin_b, Pin.IN, Pin.PULL_UP)
         self.a.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda x: self.a_change())
@@ -48,6 +48,8 @@ class RotaryEncoder():
         self.step_max = step_max
         self.step_change_time = 0
         self.on_update = on_update
+        self.min = limits[0]
+        self.max = limits[1]
     def step_step(self):
         t = time.ticks_ms()
         print("steppin' step")
@@ -62,9 +64,12 @@ class RotaryEncoder():
     def step_value(self, sign):
         self.value = self.value + sign*10**self.step
         print(buzzer)
-        if self.value < 0:
-            self.value = 0
+        if self.value < self.min:
+            self.value = self.min
             buzzer.pip(10) # shorter pip
+        if self.value > self.max:
+            self.value = self.max
+            buzzer.pip(10)
         else:
             buzzer.pip()
         print(self.value)
@@ -157,7 +162,7 @@ def set_va():
     text = (
         format_voltage(display_v) +
         format_current(display_a) +
-        format_voltage(display_w)
+        (format_current(display_w) if display_w < 0.1 else format_voltage(display_w))
     )
     
     cursors = []
@@ -173,7 +178,7 @@ def set_va():
     #print(text)
     update_display(
         text,
-        dots=(1, 4, 9 if display_w < 100 else 10),
+        dots=(1, 4, 8 if display_w < 0.1 else (9 if display_w < 100 else 10)),
         out=out, cc=cc*out, cv=cv*out,
         cursors=cursors,
     )
@@ -213,8 +218,10 @@ segments = {
     "a": (0, 4, 5, 6, 7),
     "n": (0, 4, 5),
     "e": (0, 1, 2, 3, 4, 7),
+    "o": (0, 4, 5, 7),
     "u": (0, 5, 7),
     "v": (0, 5, 7),
+    "*": (1, 2, 3, 4),
     "!": (3, 5, 6),
     ".": (6,),
     " ": (),
@@ -368,13 +375,17 @@ class KeyscanButtons():
 
 turn_display_on()
 set_display_pwm()
-update_display("HAVEFUN!")
+update_display("HAVEFUN o*o*")
 for _ in range(2):
     buzzer.really_pip()
     utime.sleep(0.1)
-utime.sleep(1)
-mv = RotaryEncoder(3_000, step=2, step_min=1, step_max=4, pin_a=16, pin_b=17, on_update=set_va)
-ma = RotaryEncoder(0_200, step=1, step_min=0, step_max=3, pin_a=19, pin_b=18, on_update=set_va)
+for _ in range(4):
+    update_display("HAVEFUN *o*o")
+    utime.sleep(0.1)
+    update_display("HAVEFUN o*o*")
+    utime.sleep(0.1)
+mv = RotaryEncoder(3_000, step=2, step_min=1, step_max=4, pin_a=16, pin_b=17, on_update=set_va, limits=(0, 30_000))
+ma = RotaryEncoder(0_200, step=1, step_min=0, step_max=3, pin_a=19, pin_b=18, on_update=set_va, limits=(0, 5_000))
 keyscan_buttons = KeyscanButtons(on_update=set_va)
 tim = Timer(period=100, mode=Timer.PERIODIC, callback=lambda t: keyscan_buttons.keyscan_update())
 
