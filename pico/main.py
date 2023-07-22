@@ -33,7 +33,7 @@ voltage_get = ADC(26)
 current_limited = ADC(28)
 
 class RotaryEncoder():
-    def __init__(self, value, step, step_min, step_max, pin_a, pin_b, on_update, limits):
+    def __init__(self, step, step_min, step_max, pin_a, pin_b, on_update, limits, filename):
         self.a = Pin(pin_a, Pin.IN, Pin.PULL_UP)
         self.b = Pin(pin_b, Pin.IN, Pin.PULL_UP)
         self.a.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda x: self.a_change())
@@ -42,7 +42,10 @@ class RotaryEncoder():
         #self.b.irq(trigger=Pin.IRQ_RISING, handler=lambda x: self.check_done())
         self.transitioning = False
         self.transition_start = 0
-        self.value = value
+        with open(filename, "rt") as f:
+            line = f.readline()
+            print(line)
+            self.value = int(line)
         self.step = step
         self.step_min = step_min
         self.step_max = step_max
@@ -50,13 +53,12 @@ class RotaryEncoder():
         self.on_update = on_update
         self.min = limits[0]
         self.max = limits[1]
+        self.filename = filename
     def step_step(self):
         t = time.ticks_ms()
-        print("steppin' step")
         if t - self.step_change_time > 1500:
             self.step_change_time = t
             return
-        print("step", self.step)
         self.step = self.step + 1
         self.step_change_time = t
         if self.step > self.step_max:
@@ -72,6 +74,9 @@ class RotaryEncoder():
             buzzer.pip(10)
         else:
             buzzer.pip()
+        # todo : this doesn't work? (ENODEV)
+        with open(self.filename, "wt") as f:
+            f.write(str(self.value))
         print(self.value)
         self.on_update()
     def a_change(self):
@@ -108,7 +113,7 @@ class RotaryEncoder():
         ):
             self.transitioning = False
 
-def set_voltage(v): 
+def set_voltage(v):
     """zero intercept + linear"""
     intercept = 900
     gradient = 3.7273 / (8400 - intercept)
@@ -155,7 +160,7 @@ def set_va():
     a = ma.value/1000
     t = time.ticks_ms()
     time_since_update = min(t - ma.transition_start, t - mv.transition_start)
-    display_target = (time_since_update < 250) or not out 
+    display_target = (time_since_update < 250) or not out
     display_v = v if display_target else (v if cv else get_voltage(200))
     display_a = a if display_target else (a if cc else get_current(200))
     display_w = display_v*display_a
@@ -164,7 +169,7 @@ def set_va():
         format_current(display_a) +
         (format_current(display_w) if display_w < 0.1 else format_voltage(display_w))
     )
-    
+
     cursors = []
     #print(t - mv.step_change_time)
     if t - mv.step_change_time < 1000:
@@ -384,8 +389,14 @@ for _ in range(4):
     utime.sleep(0.1)
     update_display("HAVEFUN o*o*")
     utime.sleep(0.1)
-mv = RotaryEncoder(3_000, step=2, step_min=1, step_max=4, pin_a=16, pin_b=17, on_update=set_va, limits=(0, 30_000))
-ma = RotaryEncoder(0_200, step=1, step_min=0, step_max=3, pin_a=19, pin_b=18, on_update=set_va, limits=(0, 5_000))
+
+#with open("mv.txt") as f:
+#    f.write("3000")
+#with open("ma.txt") as f:
+#    f.write("300")
+
+mv = RotaryEncoder(step=2, step_min=1, step_max=4, pin_a=16, pin_b=17, on_update=set_va, limits=(0, 30_000), filename="mv.txt")
+ma = RotaryEncoder(step=1, step_min=0, step_max=3, pin_a=19, pin_b=18, on_update=set_va, limits=(0, 5_000), filename="ma.txt")
 keyscan_buttons = KeyscanButtons(on_update=set_va)
 tim = Timer(period=100, mode=Timer.PERIODIC, callback=lambda t: keyscan_buttons.keyscan_update())
 
